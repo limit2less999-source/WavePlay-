@@ -1,0 +1,6 @@
+{
+  "name": "WavePlay",
+  "description": "Offline music and video player with Gemini AI music generator, dynamic equalizer, playlist management, themes, direct link downloader, smooth dragging controls, and video player with gesture controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
