@@ -36,10 +36,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MediaRepository(application)
     val playbackManager = PlaybackManager(application)
 
+    private val prefs = application.getSharedPreferences("waveplay_prefs", android.content.Context.MODE_PRIVATE)
+
     private val _currentScreen = MutableStateFlow<Screen>(Screen.Music)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
-    private val _currentTheme = MutableStateFlow(AppThemeMode.CYBER_NEON)
+    private val _currentTheme = MutableStateFlow(
+        try {
+            val savedName = prefs.getString("app_theme", AppThemeMode.CYBER_NEON.name)
+            AppThemeMode.valueOf(savedName ?: AppThemeMode.CYBER_NEON.name)
+        } catch (_: Exception) {
+            AppThemeMode.CYBER_NEON
+        }
+    )
     val currentTheme: StateFlow<AppThemeMode> = _currentTheme.asStateFlow()
 
     private val _isNowPlayingExpanded = MutableStateFlow(false)
@@ -98,13 +107,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setProUser(isPro: Boolean) {
         _isProUser.value = isPro
+        prefs.edit().putBoolean("is_pro_user", isPro).apply()
     }
 
     fun toggleProUser() {
-        _isProUser.value = !_isProUser.value
+        val next = !_isProUser.value
+        _isProUser.value = next
+        prefs.edit().putBoolean("is_pro_user", next).apply()
     }
 
     init {
+        val savedPro = prefs.getBoolean("is_pro_user", false)
+        if (savedPro) _isProUser.value = true
+
         viewModelScope.launch {
             repository.initializeOfflineSamplesIfEmpty()
         }
@@ -116,6 +131,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setTheme(mode: AppThemeMode) {
         _currentTheme.value = mode
+        prefs.edit().putString("app_theme", mode.name).apply()
     }
 
     fun setNowPlayingExpanded(expanded: Boolean) {
@@ -170,6 +186,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cycleRepeatMode() {
         playbackManager.cycleRepeatMode()
+    }
+
+    fun playNextInQueue(track: TrackEntity) {
+        playbackManager.insertTrackNext(track)
+    }
+
+    val isPlayTogether: StateFlow<Boolean> = playbackManager.isPlayTogether
+
+    fun togglePlayTogether() {
+        playbackManager.togglePlayTogether()
+    }
+
+    fun scanDeviceMedia() {
+        viewModelScope.launch {
+            repository.scanDeviceMedia()
+        }
+    }
+
+    fun deleteTracks(tracks: List<TrackEntity>) {
+        viewModelScope.launch {
+            tracks.forEach { repository.deleteTrack(it) }
+        }
+    }
+
+    fun addTracksToPlaylist(playlistId: Long, trackIds: List<String>) {
+        viewModelScope.launch {
+            trackIds.forEach { repository.addTrackToPlaylist(playlistId, it) }
+        }
     }
 
     fun setPlaybackSpeed(speed: Float) {

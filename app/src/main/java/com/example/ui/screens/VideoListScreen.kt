@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -23,9 +24,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
@@ -59,8 +62,14 @@ fun VideoListScreen(
     onPlayVideo: (TrackEntity) -> Unit,
     onDeleteVideo: (TrackEntity) -> Unit,
     onImportVideo: (Uri, String?) -> Unit,
-    onNavigateToDownloader: () -> Unit
+    onNavigateToDownloader: () -> Unit,
+    onBack: () -> Unit = {},
+    onScanVideos: () -> Unit = {}
 ) {
+    BackHandler {
+        onBack()
+    }
+
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -82,20 +91,33 @@ fun VideoListScreen(
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp)
         ) {
-            // Header
+            // Header with Back button
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(40.dp).testTag("video_back_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
                 Icon(
                     imageVector = Icons.Default.VideoLibrary,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(28.dp)
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Video Player",
@@ -104,15 +126,28 @@ fun VideoListScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "Offline playback with double tap ±10s skip",
+                        text = "${videoTracks.size} Videos • Double tap ±10s skip",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
+                // Scan / Refresh Button
+                IconButton(
+                    onClick = onScanVideos,
+                    modifier = Modifier.size(40.dp).testTag("video_refresh_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Scan Videos",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // Import Button
                 IconButton(
                     onClick = { videoPickerLauncher.launch("video/*") },
-                    modifier = Modifier.size(48.dp).testTag("import_video_btn")
+                    modifier = Modifier.size(40.dp).testTag("import_video_btn")
                 ) {
                     Icon(
                         imageVector = Icons.Default.FileOpen,

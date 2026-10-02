@@ -35,9 +35,17 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.WorkspacePremium
+import com.example.player.RepeatMode
 import com.example.ui.components.AdMobBannerView
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -91,7 +99,13 @@ fun MusicScreen(
     onAddTrackToPlaylist: (playlistId: Long, trackId: String) -> Unit,
     onImportAudio: (Uri, String?) -> Unit,
     isProUser: Boolean = false,
-    onOpenPro: () -> Unit = {}
+    onOpenPro: () -> Unit = {},
+    onPlayNext: (TrackEntity) -> Unit = {},
+    onScanDevice: () -> Unit = {},
+    onToggleShuffle: () -> Unit = {},
+    onCycleRepeatMode: () -> Unit = {},
+    isPlayTogether: Boolean = false,
+    onTogglePlayTogether: () -> Unit = {}
 ) {
     val audioPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -104,12 +118,13 @@ fun MusicScreen(
     var trackForPlaylistDialog by remember { mutableStateOf<TrackEntity?>(null) }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var showThemePicker by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     Surface(
         modifier = modifier
             .fillMaxSize()
             .testTag("home_screen"),
-        color = Color(0xFF0F1724) // Deep slate background matching reference image 1
+        color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier
@@ -130,10 +145,23 @@ fun MusicScreen(
                     text = "WavePlay",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.primary
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Scan Device Media / Refresh Button
+                    IconButton(
+                        onClick = onScanDevice,
+                        modifier = Modifier.size(38.dp).testTag("home_scan_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Scan Device Audio",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
                     // Pro Crown / VIP Status Button
                     IconButton(
                         onClick = onOpenPro,
@@ -171,7 +199,7 @@ fun MusicScreen(
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "Search",
-                            tint = if (isSearchExpanded || searchQuery.isNotBlank()) Color(0xFF38BDF8) else Color(0xFF94A3B8),
+                            tint = if (isSearchExpanded || searchQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -184,7 +212,7 @@ fun MusicScreen(
                         Icon(
                             imageVector = Icons.Default.Palette,
                             contentDescription = "Theme",
-                            tint = Color(0xFF38BDF8),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -197,7 +225,7 @@ fun MusicScreen(
                         Icon(
                             imageVector = Icons.Default.SwapVert,
                             contentDescription = "Arrange files",
-                            tint = Color(0xFF94A3B8),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -223,7 +251,7 @@ fun MusicScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(Color(0xFF1E293B))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable { onNavigateCategory(Screen.Videos) }
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                                 .testTag("category_pill_videos"),
@@ -233,13 +261,13 @@ fun MusicScreen(
                                 Icon(
                                     imageVector = Icons.Default.PlayCircle,
                                     contentDescription = null,
-                                    tint = Color(0xFF38BDF8),
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Videos",
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 14.sp
                                 )
@@ -253,7 +281,7 @@ fun MusicScreen(
                             modifier = Modifier
                                 .height(20.dp)
                                 .width(1.dp)
-                                .background(Color.White.copy(alpha = 0.25f))
+                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f))
                         )
                     }
 
@@ -262,14 +290,14 @@ fun MusicScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(Color(0xFF0284C7)) // Bright vibrant cyan-blue pill
+                                .background(MaterialTheme.colorScheme.primary)
                                 .padding(horizontal = 18.dp, vertical = 8.dp)
                                 .testTag("category_pill_songs"),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "Songs",
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
                             )
@@ -281,7 +309,7 @@ fun MusicScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(Color(0xFF1E293B))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable { onNavigateCategory(Screen.Playlists) }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                                 .testTag("category_pill_playlists"),
@@ -289,7 +317,7 @@ fun MusicScreen(
                         ) {
                             Text(
                                 text = "Playlists",
-                                color = Color(0xFF94A3B8),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp
                             )
@@ -301,7 +329,7 @@ fun MusicScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(Color(0xFF1E293B))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable { onNavigateCategory(Screen.Downloader) }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                                 .testTag("category_pill_downloader"),
@@ -309,7 +337,7 @@ fun MusicScreen(
                         ) {
                             Text(
                                 text = "Downloads",
-                                color = Color(0xFF94A3B8),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp
                             )
@@ -321,7 +349,7 @@ fun MusicScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(Color(0xFF7C3AED).copy(alpha = 0.25f))
+                                .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
                                 .clickable { onNavigateCategory(Screen.AiMusic) }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                                 .testTag("category_pill_ai_music"),
@@ -330,7 +358,7 @@ fun MusicScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "✨ AI Studio",
-                                    color = Color(0xFFA78BFA),
+                                    color = MaterialTheme.colorScheme.secondary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
@@ -342,7 +370,7 @@ fun MusicScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Dedicated Search Bar (when search is toggled) OR "Shuffle playback" row (Reference Image 1)
+            // Dedicated Search Bar (when search is toggled) OR "Shuffle playback" row
             if (isSearchExpanded || searchQuery.isNotBlank()) {
                 OutlinedTextField(
                     value = searchQuery,
@@ -352,28 +380,28 @@ fun MusicScreen(
                         .testTag("music_search_input"),
                     placeholder = { Text("Search songs, artists...") },
                     leadingIcon = {
-                        Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = Color(0xFF38BDF8))
+                        Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     },
                     trailingIcon = {
                         IconButton(onClick = {
                             if (searchQuery.isNotBlank()) onSearchQueryChange("")
                             else isSearchExpanded = false
                         }) {
-                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Close search", tint = Color(0xFF94A3B8))
+                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Close search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF0284C7),
-                        unfocusedBorderColor = Color(0xFF1E293B),
-                        focusedContainerColor = Color(0xFF131D2E),
-                        unfocusedContainerColor = Color(0xFF131D2E)
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
                     )
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             } else {
-                // Shuffle Playback Row matching Reference Image 1
+                // Shuffle & Repeat Playback Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -388,6 +416,7 @@ fun MusicScreen(
                                 if (tracks.isNotEmpty()) {
                                     val shuffled = tracks.shuffled()
                                     onPlayTrack(shuffled.first(), shuffled)
+                                    onToggleShuffle()
                                 }
                             }
                             .padding(vertical = 4.dp),
@@ -397,30 +426,53 @@ fun MusicScreen(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF0284C7)),
+                                .background(MaterialTheme.colorScheme.primary),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.PlayArrow,
+                                imageVector = if (playbackState.isShuffle) Icons.Default.Shuffle else Icons.Default.PlayArrow,
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Shuffle playback (${tracks.size})",
+                            text = if (playbackState.isShuffle) "Shuffled (${tracks.size})" else "Shuffle playback (${tracks.size})",
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             fontSize = 15.sp
                         )
                     }
 
-                    Text(
-                        text = "Long-press to arrange",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF64748B)
-                    )
+                    // Quick Repeat Mode Toggle (OFF -> ALL -> ONE)
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { onCycleRepeatMode() }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val (repIcon, repLabel) = when (playbackState.repeatMode) {
+                            RepeatMode.ONE -> Pair(Icons.Default.RepeatOne, "Repeat One")
+                            RepeatMode.ALL -> Pair(Icons.Default.Repeat, "Repeat All")
+                            RepeatMode.OFF -> Pair(Icons.Default.Repeat, "Loop Off")
+                        }
+                        Icon(
+                            imageVector = repIcon,
+                            contentDescription = repLabel,
+                            tint = if (playbackState.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = repLabel,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (playbackState.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
             }
@@ -444,20 +496,19 @@ fun MusicScreen(
                 Text(
                     text = "${tracks.size} Songs",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFF94A3B8),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Long-press to arrange",
+                    text = "Tap 3-dots for Play Next & Share",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF64748B)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                 )
             }
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Tracks List matching Reference Image 1:
-            // Squircle on left with music note, title in bold white, subtitle in gray
+            // Tracks List with Empty State Card
             if (tracks.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -465,19 +516,59 @@ fun MusicScreen(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.MusicNote,
-                            contentDescription = null,
-                            tint = Color(0xFF475569),
-                            modifier = Modifier.size(54.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "No songs found",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF94A3B8)
-                        )
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(54.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Scan Device Audio Files",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Grant permission to automatically load all your phone's songs, downloads, and audio tracks.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            androidx.compose.material3.Button(
+                                onClick = onScanDevice,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Scan Device Audio (Allow Permission)", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            androidx.compose.material3.OutlinedButton(
+                                onClick = { audioPickerLauncher.launch("audio/*") },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.FileOpen, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Pick Songs From Storage", color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
                     }
                 }
             } else {
@@ -495,7 +586,7 @@ fun MusicScreen(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(
-                                    if (isPlaying) Color(0xFF1E293B) else Color.Transparent
+                                    if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
                                 )
                                 .combinedClickable(
                                     onClick = { onPlayTrack(track, tracks) },
@@ -508,18 +599,21 @@ fun MusicScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Squircle Thumbnail with Music Note (matching reference image 1)
+                                // Squircle Thumbnail with Music Note
                                 Box(
                                     modifier = Modifier
                                         .size(50.dp)
                                         .clip(RoundedCornerShape(14.dp))
-                                        .background(Color(0xFF182234)),
+                                        .background(
+                                            if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                            else MaterialTheme.colorScheme.surfaceVariant
+                                        ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.MusicNote,
                                         contentDescription = null,
-                                        tint = if (isPlaying) Color(0xFF38BDF8) else Color(0xFF64748B),
+                                        tint = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(26.dp)
                                     )
                                 }
@@ -532,15 +626,15 @@ fun MusicScreen(
                                         text = track.title,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isPlaying) Color(0xFF38BDF8) else Color.White,
+                                        color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = if (track.album.isNotBlank()) track.album else "Download",
+                                        text = if (track.album.isNotBlank()) track.album else "Local Audio",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF94A3B8),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -556,7 +650,7 @@ fun MusicScreen(
                                         Icon(
                                             imageVector = Icons.Default.MoreVert,
                                             contentDescription = "Options",
-                                            tint = Color(0xFF64748B),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
@@ -573,6 +667,54 @@ fun MusicScreen(
                                             onClick = {
                                                 showTrackMenu = false
                                                 onStartArrangeMode()
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Play next") },
+                                            leadingIcon = {
+                                                Icon(Icons.Default.SkipNext, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                            },
+                                            onClick = {
+                                                showTrackMenu = false
+                                                onPlayNext(track)
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Share") },
+                                            leadingIcon = {
+                                                Icon(Icons.Default.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                            },
+                                            onClick = {
+                                                showTrackMenu = false
+                                                val sendIntent = android.content.Intent().apply {
+                                                    action = android.content.Intent.ACTION_SEND
+                                                    if (track.mediaUri.startsWith("content://")) {
+                                                        putExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri.parse(track.mediaUri))
+                                                        type = "audio/*"
+                                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                    } else {
+                                                        val file = java.io.File(track.mediaUri)
+                                                        if (file.exists()) {
+                                                            try {
+                                                                val contentUri = androidx.core.content.FileProvider.getUriForFile(
+                                                                    context,
+                                                                    "${context.packageName}.fileprovider",
+                                                                    file
+                                                                )
+                                                                putExtra(android.content.Intent.EXTRA_STREAM, contentUri)
+                                                                type = "audio/*"
+                                                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                            } catch (_: Exception) {
+                                                                putExtra(android.content.Intent.EXTRA_TEXT, "Listening to ${track.title} on WavePlay")
+                                                                type = "text/plain"
+                                                            }
+                                                        } else {
+                                                            putExtra(android.content.Intent.EXTRA_TEXT, "Listening to ${track.title} on WavePlay")
+                                                            type = "text/plain"
+                                                        }
+                                                    }
+                                                }
+                                                context.startActivity(android.content.Intent.createChooser(sendIntent, "Share Track"))
                                             }
                                         )
                                         DropdownMenuItem(
@@ -644,6 +786,86 @@ fun MusicScreen(
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                     fontSize = 15.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "PLAYBACK & SYSTEM BEHAVIOR",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+
+                    // Play Together With Other Apps
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onTogglePlayTogether() },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Play Together With Other Apps", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text("Don't pause when Instagram, Games, or Camera play audio", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            androidx.compose.material3.Switch(
+                                checked = isPlayTogether,
+                                onCheckedChange = { onTogglePlayTogether() }
+                            )
+                        }
+                    }
+
+                    // Display Over Other Apps / Floating Player
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                                    if (!android.provider.Settings.canDrawOverlays(context)) {
+                                        val intent = android.content.Intent(
+                                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            android.net.Uri.parse("package:${context.packageName}")
+                                        )
+                                        context.startActivity(intent)
+                                    }
+                                }
+                            },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Display Over Other Apps", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                val hasOverlay = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                                    android.provider.Settings.canDrawOverlays(context)
+                                } else true
+                                Text(
+                                    if (hasOverlay) "Permission Allowed • Video PiP & Floating Window Active" else "Tap to Grant System Overlay Permission",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (hasOverlay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                 )
                             }
                         }

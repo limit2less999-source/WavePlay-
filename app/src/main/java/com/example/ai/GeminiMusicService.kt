@@ -25,11 +25,12 @@ import kotlin.math.sin
 
 data class MusicGenerationParams(
     val prompt: String,
-    val genre: String = "Lo-Fi",
-    val mood: String = "Chill",
+    val genre: String = "Default",
+    val mood: String = "Default",
     val bpm: Int = 110,
     val durationSeconds: Int = 30,
-    val customTitle: String? = null
+    val customTitle: String? = null,
+    val lyrics: String? = null
 )
 
 class GeminiMusicService(
@@ -85,9 +86,10 @@ class GeminiMusicService(
         val model = "gemini-2.5-flash-native-audio-preview-12-2025"
         val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
 
+        val lyricsPart = if (!params.lyrics.isNullOrBlank()) " Lyrics / Vocals: ${params.lyrics}." else ""
         val systemPrompt = "You are Gemini AI Music Producer. Compose a high fidelity musical piece matching: " +
                 "Genre: ${params.genre}, Mood: ${params.mood}, BPM: ${params.bpm}, Duration: ${params.durationSeconds}s. " +
-                "Prompt: ${params.prompt}."
+                "Prompt: ${params.prompt}.$lyricsPart"
 
         val requestJson = JSONObject().apply {
             put("contents", JSONArray().apply {

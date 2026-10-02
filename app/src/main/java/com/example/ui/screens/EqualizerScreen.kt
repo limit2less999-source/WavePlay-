@@ -96,7 +96,7 @@ fun EqualizerScreen(
         modifier = modifier
             .fillMaxSize()
             .testTag("equalizer_screen"),
-        color = Color(0xFF0D131F)
+        color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier

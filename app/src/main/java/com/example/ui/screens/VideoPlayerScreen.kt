@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Forward10
@@ -82,12 +83,14 @@ fun VideoPlayerScreen(
     video: TrackEntity,
     playbackManager: PlaybackManager,
     playbackState: PlaybackState,
+    isInPipMode: Boolean = false,
     onClose: () -> Unit
 ) {
     BackHandler {
         onClose()
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     var areControlsVisible by remember { mutableStateOf(true) }
     var isControlsLocked by remember { mutableStateOf(false) }
     var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
@@ -160,7 +163,7 @@ fun VideoPlayerScreen(
 
         // Overlay Controls (Animated Visibility)
         AnimatedVisibility(
-            visible = areControlsVisible && !isControlsLocked,
+            visible = areControlsVisible && !isControlsLocked && !isInPipMode,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize()
@@ -209,6 +212,26 @@ fun VideoPlayerScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
+
+                    // Picture-in-Picture Button
+                    IconButton(
+                        onClick = {
+                            val activity = context as? android.app.Activity
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && activity != null) {
+                                val pipParams = android.app.PictureInPictureParams.Builder()
+                                    .setAspectRatio(android.util.Rational(16, 9))
+                                    .build()
+                                activity.enterPictureInPictureMode(pipParams)
+                            }
+                        },
+                        modifier = Modifier.size(48.dp).testTag("video_pip_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureInPictureAlt,
+                            contentDescription = "Picture in Picture",
+                            tint = Color.White
+                        )
+                    }
 
                     // Aspect Ratio Button
                     IconButton(

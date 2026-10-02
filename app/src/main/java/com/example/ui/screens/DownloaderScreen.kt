@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,8 +15,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,13 +38,18 @@ fun DownloaderScreen(
     activeDownloads: List<DownloadTask>,
     onStartDownload: (url: String, customTitle: String?, forceVideo: Boolean?) -> Unit,
     onCancelDownload: (String) -> Unit,
-    onDismissTask: (String) -> Unit
+    onDismissTask: (String) -> Unit,
+    onBack: () -> Unit = {}
 ) {
+    BackHandler {
+        onBack()
+    }
+
     Surface(
         modifier = modifier
             .fillMaxSize()
             .testTag("downloader_screen"),
-        color = Color(0xFF0F1724)
+        color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier
@@ -51,17 +59,30 @@ fun DownloaderScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Header
+            // Header with Back button
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(40.dp).testTag("downloader_back_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
                 Icon(
                     imageVector = Icons.Default.CloudDownload,
                     contentDescription = null,
-                    tint = Color(0xFF38BDF8),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(32.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -70,12 +91,12 @@ fun DownloaderScreen(
                         text = "Direct Link Downloader",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
                         text = "Download audio and video files directly to device storage",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF94A3B8)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

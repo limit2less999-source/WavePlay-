@@ -45,6 +45,9 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Sms
@@ -118,7 +121,11 @@ fun NowPlayingSheet(
     onRenameTrack: (newTitle: String, newCoverColor: Long) -> Unit,
     onStartSleepTimer: (Int) -> Unit,
     onCancelSleepTimer: () -> Unit,
-    onOpenQueue: () -> Unit
+    onOpenQueue: () -> Unit,
+    onToggleShuffle: () -> Unit = {},
+    onCycleRepeatMode: () -> Unit = {},
+    onTogglePlayTogether: () -> Unit = {},
+    isPlayTogether: Boolean = false
 ) {
     BackHandler {
         onCollapse()
@@ -140,7 +147,7 @@ fun NowPlayingSheet(
         modifier = modifier
             .fillMaxSize()
             .testTag("now_playing_screen"),
-        color = Color(0xFF201524) // Deep warm plum background matching reference image 2
+        color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier
@@ -392,90 +399,191 @@ fun NowPlayingSheet(
                                 showThemeDialog = true
                             }
                         )
+
+                        // 7. Play Together With Other Apps
+                        DropdownMenuItem(
+                            text = {
+                                Text(if (isPlayTogether) "Play together with other apps (ON)" else "Play together with other apps (OFF)")
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.GraphicEq,
+                                    contentDescription = null,
+                                    tint = if (isPlayTogether) MaterialTheme.colorScheme.primary else Color.White
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onTogglePlayTogether()
+                            }
+                        )
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Minimalist timeline seekbar & time indicators (as in reference image 2)
+            // Ultra-Sleek Modern Audio Timeline & High-Precision Scrubber
+            var localSeekingPosition by remember { mutableStateOf<Float?>(null) }
             val duration = playbackState.durationMs.coerceAtLeast(1000L)
             val position = playbackState.currentPositionMs.coerceIn(0L, duration)
+            val currentSliderVal = localSeekingPosition ?: position.toFloat()
 
-            Slider(
-                value = position.toFloat(),
-                onValueChange = { onSeekTo(it.toLong()) },
-                valueRange = 0f..duration.toFloat(),
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("now_playing_seekbar"),
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color.White.copy(alpha = 0.85f),
-                    inactiveTrackColor = Color.White.copy(alpha = 0.2f)
-                )
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(vertical = 4.dp)
             ) {
-                Text(
-                    text = TimeUtils.formatMs(position),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f)
+                Slider(
+                    value = currentSliderVal,
+                    onValueChange = { localSeekingPosition = it },
+                    onValueChangeFinished = {
+                        localSeekingPosition?.let { onSeekTo(it.toLong()) }
+                        localSeekingPosition = null
+                    },
+                    valueRange = 0f..duration.toFloat(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(30.dp)
+                        .testTag("now_playing_seekbar"),
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 )
-                Text(
-                    text = TimeUtils.formatMs(duration),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = TimeUtils.formatMs((localSeekingPosition?.toLong() ?: position)),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Remaining time
+                    val remainingMs = (duration - (localSeekingPosition?.toLong() ?: position)).coerceAtLeast(0L)
+                    Text(
+                        text = "-${TimeUtils.formatMs(remainingMs)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Main Playback Controls: Previous |◀◀, Play/Pause ▶, Next ▶▶| (reference image 2)
+            // Main Playback Controls: Shuffle | Previous | Play/Pause | Next | Repeat Mode
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Shuffle Button with visual active indicator
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = onToggleShuffle,
+                        modifier = Modifier.size(48.dp).testTag("now_playing_shuffle")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Shuffle,
+                            contentDescription = "Shuffle",
+                            tint = if (playbackState.isShuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    Text(
+                        text = if (playbackState.isShuffle) "SHUFFLE" else "OFF",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (playbackState.isShuffle) MaterialTheme.colorScheme.primary else Color.Transparent
+                    )
+                }
+
                 // Previous button
                 IconButton(
                     onClick = onPrevious,
-                    modifier = Modifier.size(64.dp).testTag("now_playing_prev")
+                    modifier = Modifier.size(54.dp).testTag("now_playing_prev")
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipPrevious,
                         contentDescription = "Previous",
-                        tint = Color.White,
-                        modifier = Modifier.size(46.dp)
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(42.dp)
                     )
                 }
 
-                // Center Play/Pause button
-                IconButton(
-                    onClick = onTogglePlay,
-                    modifier = Modifier.size(80.dp).testTag("now_playing_play_pause")
+                // Center Play/Pause button with glowing circle
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable { onTogglePlay() }
+                        .testTag("now_playing_play_pause"),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (playbackState.isPlaying) "Pause" else "Play",
-                        tint = Color.White,
-                        modifier = Modifier.size(56.dp)
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(44.dp)
                     )
                 }
 
                 // Next button
                 IconButton(
                     onClick = onNext,
-                    modifier = Modifier.size(64.dp).testTag("now_playing_next")
+                    modifier = Modifier.size(54.dp).testTag("now_playing_next")
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipNext,
                         contentDescription = "Next",
-                        tint = Color.White,
-                        modifier = Modifier.size(46.dp)
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(42.dp)
+                    )
+                }
+
+                // Repeat Mode Button (Cycle OFF -> ALL -> ONE)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = onCycleRepeatMode,
+                        modifier = Modifier.size(48.dp).testTag("now_playing_repeat")
+                    ) {
+                        val repeatIcon = if (playbackState.repeatMode == com.example.player.RepeatMode.ONE) {
+                            Icons.Default.RepeatOne
+                        } else {
+                            Icons.Default.Repeat
+                        }
+                        val repeatTint = if (playbackState.repeatMode != com.example.player.RepeatMode.OFF) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        }
+                        Icon(
+                            imageVector = repeatIcon,
+                            contentDescription = "Repeat Mode",
+                            tint = repeatTint,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    val loopText = when (playbackState.repeatMode) {
+                        com.example.player.RepeatMode.ONE -> "ONE"
+                        com.example.player.RepeatMode.ALL -> "LOOP"
+                        com.example.player.RepeatMode.OFF -> ""
+                    }
+                    Text(
+                        text = loopText,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }

@@ -18,21 +18,26 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material.icons.filled.VerticalAlignTop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -46,8 +51,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,23 +77,28 @@ enum class SmartSortOption(val label: String) {
 @Composable
 fun DragToArrangeScreen(
     tracks: List<TrackEntity>,
+    playlists: List<com.example.data.local.PlaylistEntity> = emptyList(),
     onApply: (List<TrackEntity>) -> Unit,
+    onDeleteSelected: (List<TrackEntity>) -> Unit = {},
+    onAddSelectedToPlaylist: (Long, List<String>) -> Unit = { _, _ -> },
     onClose: () -> Unit
 ) {
     BackHandler {
         onClose()
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     val reorderedTracks = remember(tracks) {
         mutableStateListOf<TrackEntity>().apply { addAll(tracks) }
     }
     val selectedIds = remember { mutableStateListOf<String>() }
+    var showPlaylistChooserDialog by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier
             .fillMaxSize()
             .testTag("drag_to_arrange_screen"),
-        color = Color(0xFF0C1420) // Deep navy matching reference image 3
+        color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier
@@ -157,6 +170,29 @@ fun DragToArrangeScreen(
                         color = Color(0xFF94A3B8),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                item {
+                    val isAllSelected = selectedIds.size == reorderedTracks.size && reorderedTracks.isNotEmpty()
+                    FilterChip(
+                        selected = isAllSelected,
+                        onClick = {
+                            if (isAllSelected) {
+                                selectedIds.clear()
+                            } else {
+                                selectedIds.clear()
+                                selectedIds.addAll(reorderedTracks.map { it.id })
+                            }
+                        },
+                        label = { Text(if (isAllSelected) "Deselect All" else "Select All (${selectedIds.size})", fontSize = 12.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.SelectAll, contentDescription = null, modifier = Modifier.size(14.dp))
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = if (isAllSelected) MaterialTheme.colorScheme.primary else Color(0xFF1E293B),
+                            labelColor = if (isAllSelected) Color.Black else Color.White
+                        )
                     )
                 }
 
@@ -421,32 +457,61 @@ fun DragToArrangeScreen(
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Move to top
-                    Row(
-                        modifier = Modifier
-                            .clickable(enabled = selectedIds.isNotEmpty()) {
-                                if (selectedIds.isNotEmpty()) {
-                                    val selectedTracks = reorderedTracks.filter { selectedIds.contains(it.id) }
-                                    reorderedTracks.removeAll(selectedTracks)
-                                    reorderedTracks.addAll(0, selectedTracks)
+                    // Share selected
+                    IconButton(
+                        onClick = {
+                            if (selectedIds.isNotEmpty()) {
+                                val selectedTracks = reorderedTracks.filter { selectedIds.contains(it.id) }
+                                val text = selectedTracks.joinToString("\n") { "${it.title} - ${it.artist}" }
+                                val sendIntent = android.content.Intent().apply {
+                                    action = android.content.Intent.ACTION_SEND
+                                    putExtra(android.content.Intent.EXTRA_TEXT, "Shared from WavePlay:\n$text")
+                                    type = "text/plain"
                                 }
+                                context.startActivity(android.content.Intent.createChooser(sendIntent, "Share Selected Songs"))
                             }
-                            .padding(8.dp)
-                            .testTag("move_to_top_btn"),
-                        verticalAlignment = Alignment.CenterVertically
+                        },
+                        enabled = selectedIds.isNotEmpty()
                     ) {
                         Icon(
-                            imageVector = Icons.Default.VerticalAlignTop,
-                            contentDescription = "Move to top",
-                            tint = if (selectedIds.isNotEmpty()) Color(0xFF38BDF8) else Color(0xFF64748B),
-                            modifier = Modifier.size(22.dp)
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = if (selectedIds.isNotEmpty()) MaterialTheme.colorScheme.primary else Color(0xFF64748B)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Move to top",
-                            color = if (selectedIds.isNotEmpty()) Color.White else Color(0xFF64748B),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
+                    }
+
+                    // Add to Playlist
+                    IconButton(
+                        onClick = {
+                            if (selectedIds.isNotEmpty()) {
+                                showPlaylistChooserDialog = true
+                            }
+                        },
+                        enabled = selectedIds.isNotEmpty()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlaylistAdd,
+                            contentDescription = "Add to playlist",
+                            tint = if (selectedIds.isNotEmpty()) MaterialTheme.colorScheme.primary else Color(0xFF64748B)
+                        )
+                    }
+
+                    // Delete Selected
+                    IconButton(
+                        onClick = {
+                            if (selectedIds.isNotEmpty()) {
+                                val selectedTracks = reorderedTracks.filter { selectedIds.contains(it.id) }
+                                onDeleteSelected(selectedTracks)
+                                reorderedTracks.removeAll(selectedTracks)
+                                selectedIds.clear()
+                            }
+                        },
+                        enabled = selectedIds.isNotEmpty()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = if (selectedIds.isNotEmpty()) MaterialTheme.colorScheme.error else Color(0xFF64748B)
                         )
                     }
 
@@ -457,36 +522,94 @@ fun DragToArrangeScreen(
                             .background(Color.White.copy(alpha = 0.15f))
                     )
 
-                    // Move to bottom
-                    Row(
-                        modifier = Modifier
-                            .clickable(enabled = selectedIds.isNotEmpty()) {
-                                if (selectedIds.isNotEmpty()) {
-                                    val selectedTracks = reorderedTracks.filter { selectedIds.contains(it.id) }
-                                    reorderedTracks.removeAll(selectedTracks)
-                                    reorderedTracks.addAll(selectedTracks)
-                                }
+                    // Move to top
+                    IconButton(
+                        onClick = {
+                            if (selectedIds.isNotEmpty()) {
+                                val selectedTracks = reorderedTracks.filter { selectedIds.contains(it.id) }
+                                reorderedTracks.removeAll(selectedTracks)
+                                reorderedTracks.addAll(0, selectedTracks)
                             }
-                            .padding(8.dp)
-                            .testTag("move_to_bottom_btn"),
-                        verticalAlignment = Alignment.CenterVertically
+                        },
+                        enabled = selectedIds.isNotEmpty()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VerticalAlignTop,
+                            contentDescription = "Move to top",
+                            tint = if (selectedIds.isNotEmpty()) MaterialTheme.colorScheme.primary else Color(0xFF64748B)
+                        )
+                    }
+
+                    // Move to bottom
+                    IconButton(
+                        onClick = {
+                            if (selectedIds.isNotEmpty()) {
+                                val selectedTracks = reorderedTracks.filter { selectedIds.contains(it.id) }
+                                reorderedTracks.removeAll(selectedTracks)
+                                reorderedTracks.addAll(selectedTracks)
+                            }
+                        },
+                        enabled = selectedIds.isNotEmpty()
                     ) {
                         Icon(
                             imageVector = Icons.Default.VerticalAlignBottom,
                             contentDescription = "Move to bottom",
-                            tint = if (selectedIds.isNotEmpty()) Color(0xFF38BDF8) else Color(0xFF64748B),
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Move to bottom",
-                            color = if (selectedIds.isNotEmpty()) Color.White else Color(0xFF64748B),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
+                            tint = if (selectedIds.isNotEmpty()) MaterialTheme.colorScheme.primary else Color(0xFF64748B)
                         )
                     }
                 }
             }
+        }
+
+        // Add to Playlist Chooser Dialog
+        if (showPlaylistChooserDialog) {
+            AlertDialog(
+                onDismissRequest = { showPlaylistChooserDialog = false },
+                title = { Text("Add ${selectedIds.size} songs to Playlist", fontWeight = FontWeight.Bold) },
+                text = {
+                    if (playlists.isEmpty()) {
+                        Text("No playlists found. Create a playlist first in the Playlists section.")
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(playlists) { pl ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onAddSelectedToPlaylist(pl.id, selectedIds.toList())
+                                            showPlaylistChooserDialog = false
+                                            selectedIds.clear()
+                                        },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlaylistAdd,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(pl.name, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { showPlaylistChooserDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }

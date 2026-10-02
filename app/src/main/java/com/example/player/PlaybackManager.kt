@@ -51,7 +51,10 @@ class PlaybackManager(private val context: Context) {
             true
         )
         .setHandleAudioBecomingNoisy(true)
+        .setWakeMode(C.WAKE_MODE_LOCAL)
         .build()
+
+    private var mediaSession: androidx.media3.session.MediaSession? = null
 
     private val scope = CoroutineScope(Dispatchers.Main)
     private var progressJob: Job? = null
@@ -60,18 +63,33 @@ class PlaybackManager(private val context: Context) {
     private val _sleepTimerSeconds = MutableStateFlow(0L)
     val sleepTimerSeconds: StateFlow<Long> = _sleepTimerSeconds.asStateFlow()
 
+    private val _isPlayTogether = MutableStateFlow(false)
+    val isPlayTogether: StateFlow<Boolean> = _isPlayTogether.asStateFlow()
+
     private val _playbackState = MutableStateFlow(PlaybackState())
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
 
     init {
+        PlaybackService.activePlaybackManager = this
+        try {
+            mediaSession = androidx.media3.session.MediaSession.Builder(context, exoPlayer).build()
+            PlaybackService.activeSession = mediaSession
+        } catch (_: Exception) {}
+
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _playbackState.value = _playbackState.value.copy(isPlaying = isPlaying)
                 if (isPlaying) {
                     startProgressTracker()
                     audioEffectController.attachAudioSession(exoPlayer.audioSessionId)
+                    try {
+                        PlaybackService.start(context)
+                    } catch (_: Exception) {}
                 } else {
                     stopProgressTracker()
+                    try {
+                        PlaybackService.start(context)
+                    } catch (_: Exception) {}
                 }
             }
 
@@ -134,7 +152,7 @@ class PlaybackManager(private val context: Context) {
             durationMs = track.durationMs
         )
 
-        val uri = if (track.mediaUri.startsWith("http://") || track.mediaUri.startsWith("https://")) {
+        val uri = if (track.mediaUri.startsWith("http://") || track.mediaUri.startsWith("https://") || track.mediaUri.startsWith("content://")) {
             Uri.parse(track.mediaUri)
         } else {
             Uri.fromFile(File(track.mediaUri))
@@ -144,6 +162,9 @@ class PlaybackManager(private val context: Context) {
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
         exoPlayer.play()
+        try {
+            PlaybackService.start(context)
+        } catch (_: Exception) {}
     }
 
     fun togglePlayPause() {
@@ -288,10 +309,37 @@ class PlaybackManager(private val context: Context) {
         _sleepTimerSeconds.value = 0L
     }
 
+    fun insertTrackNext(track: TrackEntity) {
+        val state = _playbackState.value
+        val newQueue = state.queue.toMutableList()
+        val insertIndex = (state.queueIndex + 1).coerceAtMost(newQueue.size)
+        newQueue.add(insertIndex, track)
+        _playbackState.value = state.copy(queue = newQueue)
+    }
+
+    fun togglePlayTogether() {
+        val next = !_isPlayTogether.value
+        _isPlayTogether.value = next
+        exoPlayer.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .setUsage(C.USAGE_MEDIA)
+                .build(),
+            !next // false = allow playing together with other apps
+        )
+        exoPlayer.setHandleAudioBecomingNoisy(!next)
+    }
+
     fun release() {
         cancelSleepTimer()
         stopProgressTracker()
         audioEffectController.release()
+        try {
+            mediaSession?.run {
+                release()
+                mediaSession = null
+            }
+        } catch (_: Exception) {}
         exoPlayer.release()
     }
 }

@@ -147,4 +147,16 @@ class MediaRepository(private val context: Context) {
         trackDao.insertTrack(track)
         track
     }
+
+    suspend fun scanDeviceMedia(): Int = withContext(Dispatchers.IO) {
+        val audios = com.example.util.MediaStoreScanner.scanDeviceAudios(context)
+        val videos = com.example.util.MediaStoreScanner.scanDeviceVideos(context)
+        if (audios.isNotEmpty()) {
+            trackDao.insertTracks(audios)
+        }
+        if (videos.isNotEmpty()) {
+            trackDao.insertTracks(videos)
+        }
+        audios.size + videos.size
+    }
 }

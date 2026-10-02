@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -78,9 +80,13 @@ fun PlaylistsScreen(
     onDeletePlaylist: (Long) -> Unit,
     onPlayTrack: (TrackEntity, List<TrackEntity>) -> Unit,
     onRemoveTrackFromPlaylist: (playlistId: Long, trackId: String) -> Unit,
-    getPlaylistTracks: (Long) -> Flow<List<TrackEntity>>
+    getPlaylistTracks: (Long) -> Flow<List<TrackEntity>>,
+    availableTracks: List<TrackEntity> = emptyList(),
+    onAddTrackToPlaylist: (playlistId: Long, trackId: String) -> Unit = { _, _ -> },
+    onBackToMusic: () -> Unit = {}
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showAddTracksDialog by remember { mutableStateOf(false) }
 
     if (selectedPlaylist != null) {
         // Detailed Playlist View
@@ -115,7 +121,7 @@ fun PlaylistsScreen(
                         modifier = Modifier.size(48.dp).testTag("playlist_back_btn")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                             tint = MaterialTheme.colorScheme.onBackground
                         )
@@ -132,6 +138,18 @@ fun PlaylistsScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
+
+                    // Add Songs to Playlist Button
+                    IconButton(
+                        onClick = { showAddTracksDialog = true },
+                        modifier = Modifier.size(48.dp).testTag("playlist_add_songs_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add Songs",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
                     IconButton(
                         onClick = { onDeletePlaylist(selectedPlaylist.id) },
@@ -362,8 +380,79 @@ fun PlaylistsScreen(
                 }
             }
         }
+
+        // Add Songs to Playlist Dialog
+        if (showAddTracksDialog) {
+            val existingIds = playlistTracks.map { it.id }.toSet()
+            val unaddedTracks = availableTracks.filter { it.id !in existingIds }
+
+            AlertDialog(
+                onDismissRequest = { showAddTracksDialog = false },
+                title = { Text("Add Songs to Playlist", fontWeight = FontWeight.Bold) },
+                text = {
+                    if (unaddedTracks.isEmpty()) {
+                        Text("All available songs are already in this playlist!")
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 350.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(unaddedTracks, key = { it.id }) { tr ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onAddTrackToPlaylist(selectedPlaylist.id, tr.id)
+                                        },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.MusicNote,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(tr.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(tr.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Add",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { showAddTracksDialog = false }) {
+                        Text("Done")
+                    }
+                }
+            )
+        }
     } else {
         // Playlists List View
+        BackHandler {
+            onBackToMusic()
+        }
+
         Box(
             modifier = modifier
                 .fillMaxSize()
@@ -376,13 +465,26 @@ fun PlaylistsScreen(
                     .navigationBarsPadding()
                     .padding(horizontal = 16.dp)
             ) {
-                // Header
+                // Header with Back button
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(
+                        onClick = onBackToMusic,
+                        modifier = Modifier.size(40.dp).testTag("playlists_back_to_music_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
                     Icon(
                         imageVector = Icons.Default.PlaylistPlay,
                         contentDescription = null,

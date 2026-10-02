@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -95,21 +96,26 @@ fun AiMusicGeneratorScreen(
         "Deep 80s retro wave groove with pumping bassline and neon synth"
     )
 
+    BackHandler {
+        onBack()
+    }
+
     var promptInput by remember { mutableStateOf(samplePrompts[0]) }
+    var lyricsInput by remember { mutableStateOf("") }
     var customTitleInput by remember { mutableStateOf("") }
-    var selectedGenre by remember { mutableStateOf("Cyberpunk Synth") }
-    var selectedMood by remember { mutableStateOf("Chill") }
+    var selectedGenre by remember { mutableStateOf("Default") }
+    var selectedMood by remember { mutableStateOf("Default") }
     var bpm by remember { mutableFloatStateOf(110f) }
     var selectedDuration by remember { mutableIntStateOf(30) }
     var showApiKeyField by remember { mutableStateOf(false) }
     var customApiKey by remember { mutableStateOf("") }
 
     val genres = listOf(
-        "Cyberpunk Synth", "Lo-Fi", "Acoustic Guitar", "Cinematic", "EDM Bass", "Jazz Cafe", "80s Retro"
+        "Default", "Mention in prompt", "Cyberpunk Synth", "Lo-Fi", "Acoustic Guitar", "Cinematic", "EDM Bass", "Jazz Cafe", "80s Retro"
     )
 
     val moods = listOf(
-        "Chill", "Energetic", "Melancholic", "Epic", "Focus", "Dreamy"
+        "Default", "Mention in prompt", "Chill", "Energetic", "Melancholic", "Epic", "Focus", "Dreamy"
     )
 
     val infiniteTransition = rememberInfiniteTransition(label = "ai_gradient")
@@ -127,7 +133,7 @@ fun AiMusicGeneratorScreen(
         modifier = modifier
             .fillMaxSize()
             .testTag("ai_music_screen"),
-        color = Color(0xFF0A0F1D)
+        color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier
@@ -266,13 +272,21 @@ fun AiMusicGeneratorScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "PROMPT & COMPOSITION",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF38BDF8),
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
-                        )
+                        Column {
+                            Text(
+                                text = "1. MUSIC PROMPT & STYLE DESCRIPTION",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "Describe instruments, tempo, vibe, beats, or story",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
 
                         TextButton(
                             onClick = {
@@ -283,11 +297,11 @@ fun AiMusicGeneratorScreen(
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = null,
-                                tint = Color(0xFF38BDF8),
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Inspire Me", color = Color(0xFF38BDF8), fontSize = 12.sp)
+                            Text("Inspire Me", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                         }
                     }
 
@@ -298,17 +312,70 @@ fun AiMusicGeneratorScreen(
                         onValueChange = { promptInput = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(100.dp)
+                            .height(95.dp)
                             .testTag("ai_prompt_input"),
-                        placeholder = { Text("Describe the instruments, mood, rhythm, or story...") },
+                        placeholder = { Text("Describe the instruments, mood, rhythm, or story (e.g. upbeat acoustic guitar with lo-fi vinyl beats)...") },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF38BDF8),
-                            unfocusedBorderColor = Color(0xFF1E293B)
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
                         ),
                         shape = RoundedCornerShape(14.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Dedicated Lyrics Box (Requested by user as completely separate box)
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "2. SONG LYRICS (SEPARATE BOX - OPTIONAL)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            if (lyricsInput.isNotBlank()) {
+                                Text(
+                                    text = "Lyrics Active",
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Paste or type your song lyrics here. Leave blank for instrumental.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = lyricsInput,
+                        onValueChange = { lyricsInput = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(105.dp)
+                            .testTag("ai_lyrics_input"),
+                        placeholder = { Text("Write your song lyrics here line-by-line:\nVerse 1: Walking under city lights...\nChorus: We play the rhythm all night...") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.secondary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Optional Custom Title
                     OutlinedTextField(
@@ -321,22 +388,36 @@ fun AiMusicGeneratorScreen(
                         placeholder = { Text("e.g. Midnight Cyber Run") },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF38BDF8),
-                            unfocusedBorderColor = Color(0xFF1E293B)
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
                         ),
                         shape = RoundedCornerShape(14.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Genre Selector
-                    Text(
-                        text = "GENRE & STYLE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF94A3B8),
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "3. GENRE & STYLE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Selected: $selectedGenre",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                     Spacer(modifier = Modifier.height(6.dp))
 
                     LazyRow(
@@ -348,25 +429,45 @@ fun AiMusicGeneratorScreen(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { selectedGenre = genre },
-                                label = { Text(genre, fontSize = 12.sp) },
+                                label = {
+                                    Text(
+                                        text = if (genre == "Default") "⚙️ Default" else if (genre == "Mention in prompt") "✍️ Mention in prompt" else genre,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF0284C7),
-                                    selectedLabelColor = Color.White
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                                 )
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Mood Selector
-                    Text(
-                        text = "MOOD & VIBE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF94A3B8),
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "4. MOOD & VIBE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Selected: $selectedMood",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                     Spacer(modifier = Modifier.height(6.dp))
 
                     LazyRow(
@@ -378,10 +479,18 @@ fun AiMusicGeneratorScreen(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { selectedMood = mood },
-                                label = { Text(mood, fontSize = 12.sp) },
+                                label = {
+                                    Text(
+                                        text = if (mood == "Default") "⚙️ Default" else if (mood == "Mention in prompt") "✍️ Mention in prompt" else mood,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF7C3AED),
-                                    selectedLabelColor = Color.White
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    selectedContainerColor = MaterialTheme.colorScheme.secondary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onSecondary
                                 )
                             )
                         }
@@ -460,7 +569,8 @@ fun AiMusicGeneratorScreen(
                                     mood = selectedMood,
                                     bpm = bpm.toInt(),
                                     durationSeconds = selectedDuration,
-                                    customTitle = customTitleInput.trim().ifBlank { null }
+                                    customTitle = customTitleInput.trim().ifBlank { null },
+                                    lyrics = lyricsInput.trim().ifBlank { null }
                                 )
                                 onGenerate(params, customApiKey.ifBlank { null })
                             }
