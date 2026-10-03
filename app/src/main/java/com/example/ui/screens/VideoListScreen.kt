@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -53,18 +54,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.TrackEntity
+import com.example.ui.components.AdMobBannerView
 import com.example.util.TimeUtils
 
 @Composable
 fun VideoListScreen(
     modifier: Modifier = Modifier,
     videoTracks: List<TrackEntity>,
+    isProUser: Boolean = false,
+    onOpenPro: () -> Unit = {},
     onPlayVideo: (TrackEntity) -> Unit,
     onDeleteVideo: (TrackEntity) -> Unit,
     onImportVideo: (Uri, String?) -> Unit,
     onNavigateToDownloader: () -> Unit,
     onBack: () -> Unit = {},
-    onScanVideos: () -> Unit = {}
+    onScanVideos: () -> Unit = {},
+    onHideVideoToVault: (TrackEntity) -> Unit = {}
 ) {
     BackHandler {
         onBack()
@@ -157,7 +162,13 @@ fun VideoListScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            // AdMob Banner Container
+            AdMobBannerView(
+                isProUser = isProUser,
+                onOpenPro = onOpenPro
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             if (videoTracks.isEmpty()) {
                 Box(
@@ -312,6 +323,15 @@ fun VideoListScreen(
                                             text = "Size: ${TimeUtils.formatBytes(video.fileSizeBytes)}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    // Move to Safe Vault Button
+                                    IconButton(onClick = { onHideVideoToVault(video) }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = "Hide in Safe Vault",
+                                            tint = Color(0xFF10B981)
                                         )
                                     }
 

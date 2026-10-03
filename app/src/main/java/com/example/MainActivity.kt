@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.components.AppSettingsDialog
 import com.example.ui.components.DirectLinkDownloaderModalSheet
 import com.example.ui.components.MiniPlayer
 import com.example.ui.components.WavePlayProSheet
@@ -45,6 +46,7 @@ import com.example.ui.screens.EqualizerScreen
 import com.example.ui.screens.MusicScreen
 import com.example.ui.screens.NowPlayingSheet
 import com.example.ui.screens.PlaylistsScreen
+import com.example.ui.screens.VaultScreen
 import com.example.ui.screens.VideoListScreen
 import com.example.ui.screens.VideoPlayerScreen
 import com.example.ui.theme.AuraTuneTheme
@@ -64,14 +66,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                val pipParams = android.app.PictureInPictureParams.Builder()
-                    .setAspectRatio(android.util.Rational(16, 9))
-                    .build()
-                enterPictureInPictureMode(pipParams)
-            } catch (_: Exception) {}
-        }
+        // PiP is only triggered when user explicitly taps the PiP floating button, not automatically
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -108,6 +103,9 @@ fun WavePlayApp(
     val isProSheetVisible by viewModel.isProSheetVisible.collectAsStateWithLifecycle()
     val isPlayTogether by viewModel.isPlayTogether.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val vaultItems by viewModel.vaultItems.collectAsStateWithLifecycle()
+    val videoBoostSpeed by viewModel.videoBoostSpeed.collectAsStateWithLifecycle()
+    val isSettingsDialogVisible by viewModel.isSettingsDialogVisible.collectAsStateWithLifecycle()
 
     // Request permissions for local storage and notifications, then scan device media
     val permissionsToRequest = remember {
@@ -159,6 +157,9 @@ fun WavePlayApp(
                     playbackManager = viewModel.playbackManager,
                     playbackState = playbackState,
                     isInPipMode = isInPipMode,
+                    boostSpeedMultiplier = videoBoostSpeed,
+                    onNextVideo = { viewModel.playNextVideo() },
+                    onPrevVideo = { viewModel.playPrevVideo() },
                     onClose = { viewModel.closeVideoPlayer() }
                 )
             } else if (isArrangeMode) {
@@ -186,7 +187,9 @@ fun WavePlayApp(
                                     playbackState = playbackState,
                                     onExpand = { viewModel.setNowPlayingExpanded(true) },
                                     onTogglePlay = { viewModel.togglePlayPause() },
-                                    onCycleRepeat = { viewModel.cycleRepeatMode() }
+                                    onCycleRepeat = { viewModel.cycleRepeatMode() },
+                                    onPlayPrevious = { viewModel.playPrevious() },
+                                    onPlayNext = { viewModel.playNext() }
                                 )
                             }
                         }
@@ -221,18 +224,24 @@ fun WavePlayApp(
                                     onToggleShuffle = { viewModel.toggleShuffle() },
                                     onCycleRepeatMode = { viewModel.cycleRepeatMode() },
                                     isPlayTogether = isPlayTogether,
-                                    onTogglePlayTogether = { viewModel.togglePlayTogether() }
+                                    onTogglePlayTogether = { viewModel.togglePlayTogether() },
+                                    onOpenSettings = { viewModel.setSettingsDialogVisible(true) },
+                                    onOpenVault = { viewModel.navigateTo(Screen.Vault) },
+                                    onHideTrackToVault = { viewModel.hideTrackToVault(it) }
                                 )
                             }
                             Screen.Videos -> {
                                 VideoListScreen(
                                     videoTracks = videoTracks,
+                                    isProUser = isProUser,
+                                    onOpenPro = { viewModel.setProSheetVisible(true) },
                                     onPlayVideo = { viewModel.openVideoPlayer(it) },
                                     onDeleteVideo = { viewModel.deleteTrack(it) },
                                     onImportVideo = { uri, name -> viewModel.importLocalMedia(uri, true, name) },
                                     onNavigateToDownloader = { viewModel.navigateTo(Screen.Downloader) },
                                     onBack = { viewModel.navigateTo(Screen.Music) },
-                                    onScanVideos = requestPermissionsAndScan
+                                    onScanVideos = requestPermissionsAndScan,
+                                    onHideVideoToVault = { viewModel.hideTrackToVault(it) }
                                 )
                             }
                             Screen.Playlists -> {
@@ -286,6 +295,29 @@ fun WavePlayApp(
                                     },
                                     onPlayTrack = { track ->
                                         viewModel.playTrack(track, audioTracks)
+                                    },
+                                    onBack = { viewModel.navigateTo(Screen.Music) }
+                                )
+                            }
+                            Screen.Vault -> {
+                                VaultScreen(
+                                    vaultItems = vaultItems,
+                                    availableAudioTracks = audioTracks,
+                                    availableVideoTracks = videoTracks,
+                                    onRestoreItem = { viewModel.restoreVaultItem(it) },
+                                    onDeleteItemPermanently = { viewModel.deleteVaultItemPermanently(it) },
+                                    onAddMediaToVault = { uri, title, type ->
+                                        viewModel.hideMediaUriToVault(uri, title, type)
+                                    },
+                                    onHideAppTrackToVault = { track ->
+                                        viewModel.hideTrackToVault(track)
+                                    },
+                                    onPlayVaultTrack = { track ->
+                                        if (track.isVideo) {
+                                            viewModel.openVideoPlayer(track)
+                                        } else {
+                                            viewModel.playTrack(track, listOf(track))
+                                        }
                                     },
                                     onBack = { viewModel.navigateTo(Screen.Music) }
                                 )
@@ -366,12 +398,30 @@ fun WavePlayApp(
                     isProUser = isProUser,
                     onDismiss = { viewModel.setProSheetVisible(false) },
                     onUpgradeSuccess = {
-                        viewModel.setProUser(true)
                         viewModel.setProSheetVisible(false)
+                    },
+                    onActivateWithUpi = { planType, utr ->
+                        viewModel.activateProWithUpi(planType, utr)
                     },
                     onToggleTestPro = {
                         viewModel.toggleProUser()
                     }
+                )
+            }
+
+            // App Settings Dialog
+            if (isSettingsDialogVisible) {
+                AppSettingsDialog(
+                    isPlayTogether = isPlayTogether,
+                    onTogglePlayTogether = { viewModel.togglePlayTogether() },
+                    currentTheme = currentTheme,
+                    onThemeChange = { viewModel.setTheme(it) },
+                    videoBoostSpeed = videoBoostSpeed,
+                    onVideoBoostSpeedChange = { viewModel.setVideoBoostSpeed(it) },
+                    onOpenVault = { viewModel.navigateTo(Screen.Vault) },
+                    onOpenPro = { viewModel.setProSheetVisible(true) },
+                    onDeveloperActivated = { viewModel.activateDeveloperBypass() },
+                    onDismiss = { viewModel.setSettingsDialogVisible(false) }
                 )
             }
         }

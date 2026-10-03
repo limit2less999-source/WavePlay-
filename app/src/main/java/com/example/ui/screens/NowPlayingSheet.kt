@@ -388,33 +388,15 @@ fun NowPlayingSheet(
                             }
                         )
 
-                        // 6. Change Theme (Feature 7)
+                        // 6. Change Theme
                         DropdownMenuItem(
                             text = { Text("Change Theme") },
                             leadingIcon = {
-                                Icon(Icons.Default.Palette, contentDescription = null, tint = Color(0xFF38BDF8))
+                                Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             },
                             onClick = {
                                 showMenu = false
                                 showThemeDialog = true
-                            }
-                        )
-
-                        // 7. Play Together With Other Apps
-                        DropdownMenuItem(
-                            text = {
-                                Text(if (isPlayTogether) "Play together with other apps (ON)" else "Play together with other apps (OFF)")
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.GraphicEq,
-                                    contentDescription = null,
-                                    tint = if (isPlayTogether) MaterialTheme.colorScheme.primary else Color.White
-                                )
-                            },
-                            onClick = {
-                                showMenu = false
-                                onTogglePlayTogether()
                             }
                         )
                     }

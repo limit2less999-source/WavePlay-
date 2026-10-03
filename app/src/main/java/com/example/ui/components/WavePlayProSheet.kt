@@ -1,5 +1,11 @@
 package com.example.ui.components
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,15 +24,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -36,6 +48,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -50,11 +63,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private const val CREATOR_UPI_ID = "9064618542@ybl"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,10 +82,28 @@ fun WavePlayProSheet(
     isProUser: Boolean,
     onDismiss: () -> Unit,
     onUpgradeSuccess: () -> Unit,
+    onActivateWithUpi: (planType: String, utr: String) -> Unit = { _, _ -> },
     onToggleTestPro: () -> Unit
 ) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("waveplay_vault", Context.MODE_PRIVATE) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     var selectedPlan by remember { mutableStateOf("lifetime") } // "monthly", "yearly", "lifetime"
+    var showUpiPaymentSection by remember { mutableStateOf(false) }
+    var utrInput by remember { mutableStateOf("") }
+    var utrError by remember { mutableStateOf(false) }
+
+    val savedExpiry = remember { prefs.getLong("pro_plan_expiry_time", 0L) }
+    val savedUtr = remember { prefs.getString("pro_plan_utr", "") ?: "" }
+    val savedPlanType = remember { prefs.getString("pro_plan_type", "lifetime") ?: "lifetime" }
+    val isOwner = remember { prefs.getBoolean("owner_bypass_activated", false) }
+
+    val planAmount = when (selectedPlan) {
+        "monthly" -> "29"
+        "yearly" -> "99"
+        else -> "299"
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -98,7 +136,7 @@ fun WavePlayProSheet(
             // Crown Icon with Glowing Gradient
             Box(
                 modifier = Modifier
-                    .size(68.dp)
+                    .size(64.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
@@ -111,25 +149,31 @@ fun WavePlayProSheet(
                     imageVector = Icons.Default.WorkspacePremium,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier.size(36.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "WavePlay Pro",
-                fontSize = 24.sp,
+                text = "WavePlay Pro VIP",
+                fontSize = 22.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = Color.White
             )
 
             Text(
-                text = if (isProUser) "You are a VIP Pro Member! All perks unlocked." else "Unlock the ultimate offline music & video experience",
-                fontSize = 13.sp,
+                text = if (isProUser) {
+                    if (isOwner) "Lifetime Developer VIP Active (100% Ad-Free)"
+                    else if (savedExpiry > 0L) {
+                        val fmt = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+                        "Pro Active until ${fmt.format(Date(savedExpiry))} • Ad-Free"
+                    } else "Lifetime VIP Membership Active • 100% Ad-Free"
+                } else "Unlock 100% Ad-Free Music & Video, Unlimited AI & Studio Equalizer",
+                fontSize = 12.sp,
                 color = if (isProUser) Color(0xFF34D399) else Color(0xFF94A3B8),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
             )
 
             // Features List
@@ -143,13 +187,13 @@ fun WavePlayProSheet(
             ) {
                 ProFeatureRow(
                     icon = Icons.Default.Block,
-                    title = "100% Ad-Free Experience",
-                    subtitle = "No banner ads, no popups, zero interruptions"
+                    title = "100% Zero Ads & Interruption-Free",
+                    subtitle = "No banner ads, no popups, smooth playback"
                 )
                 ProFeatureRow(
                     icon = Icons.Default.AutoAwesome,
-                    title = "Unlimited Gemini AI Music",
-                    subtitle = "Generate and save unlimited offline AI music"
+                    title = "Unlimited Gemini AI Music Generation",
+                    subtitle = "Synthesize and save studio-grade offline tracks"
                 )
                 ProFeatureRow(
                     icon = Icons.Default.Equalizer,
@@ -158,25 +202,24 @@ fun WavePlayProSheet(
                 )
                 ProFeatureRow(
                     icon = Icons.Default.Palette,
-                    title = "All VIP Themes Unlocked",
-                    subtitle = "Access AMOLED Pure Black, Cyber Neon & Sunset themes"
+                    title = "All VIP Themes & Safe Vault",
+                    subtitle = "AMOLED Pure Black theme & hidden private locker"
                 )
                 ProFeatureRow(
                     icon = Icons.Default.Download,
-                    title = "Ultra Fast Downloader",
-                    subtitle = "Unlimited offline downloads from direct media links"
+                    title = "Ultra Fast Media Downloader",
+                    subtitle = "High-speed offline downloads from direct links"
                 )
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Pricing Plans Selector
             if (!isProUser) {
+                // Pricing Plans Selector
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Monthly Plan
                     PlanCard(
                         modifier = Modifier.weight(1f),
                         title = "Monthly",
@@ -186,7 +229,6 @@ fun WavePlayProSheet(
                         onClick = { selectedPlan = "monthly" }
                     )
 
-                    // Lifetime Plan (Best Value)
                     PlanCard(
                         modifier = Modifier.weight(1f),
                         title = "Lifetime",
@@ -197,7 +239,6 @@ fun WavePlayProSheet(
                         onClick = { selectedPlan = "lifetime" }
                     )
 
-                    // Yearly Plan
                     PlanCard(
                         modifier = Modifier.weight(1f),
                         title = "Yearly",
@@ -208,59 +249,198 @@ fun WavePlayProSheet(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Primary Upgrade Button
-                Button(
-                    onClick = {
-                        onUpgradeSuccess()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("upgrade_pro_btn"),
+                // Payment Options: Pay with UPI
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFF59E0B)
-                    )
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131D2E)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B))
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.WorkspacePremium,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Upgrade to WavePlay Pro",
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.Black,
-                            fontSize = 15.sp
-                        )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.AccountBalance,
+                                    contentDescription = null,
+                                    tint = Color(0xFF38BDF8),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Pay via UPI (GPay / PhonePe / Paytm)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = Color.White
+                                )
+                            }
+                            Text(
+                                text = "₹$planAmount",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 16.sp,
+                                color = Color(0xFFFBBF24)
+                            )
+                        }
+
+                        // UPI ID Copy Card
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF1E293B))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Official UPI ID", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                                Text(
+                                    text = CREATOR_UPI_ID,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF38BDF8)
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF38BDF8).copy(alpha = 0.2f))
+                                    .clickable {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("UPI ID", CREATOR_UPI_ID))
+                                        Toast.makeText(context, "UPI ID copied: $CREATOR_UPI_ID", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy",
+                                    tint = Color(0xFF38BDF8),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
+                            }
+                        }
+
+                        // Quick 1-Tap Pay via Installed UPI Apps
+                        Button(
+                            onClick = {
+                                try {
+                                    val uri = Uri.parse("upi://pay?pa=$CREATOR_UPI_ID&pn=WavePlayPro&am=$planAmount&cu=INR&tn=WavePlay_Pro_${selectedPlan.uppercase()}")
+                                    val intent = Intent(Intent.ACTION_VIEW, uri)
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "No UPI app found. Please copy UPI ID $CREATOR_UPI_ID and pay via your bank app.", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(46.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Pay ₹$planAmount via UPI App", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                            }
+                        }
+
+                        // Payment Verification Step: UTR / Reference No.
+                        Column {
+                            Text(
+                                text = "Verify Payment (Enter 12-Digit UTR Number):",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF94A3B8)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = utrInput,
+                                onValueChange = {
+                                    if (it.length <= 16) {
+                                        utrInput = it.filter { char -> char.isDigit() || char.isLetter() }
+                                        utrError = false
+                                    }
+                                },
+                                placeholder = { Text("e.g. 428190281928", fontSize = 13.sp, color = Color(0xFF64748B)) },
+                                singleLine = true,
+                                isError = utrError,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            if (utrError) {
+                                Text("Please enter a valid 12-digit UTR/Reference number from your UPI receipt.", color = Color(0xFFEF4444), fontSize = 10.sp)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Button(
+                                onClick = {
+                                    val clean = utrInput.trim()
+                                    if (clean.length >= 10) {
+                                        onActivateWithUpi(selectedPlan, clean)
+                                        Toast.makeText(context, "Payment confirmed! Pro VIP activated successfully.", Toast.LENGTH_LONG).show()
+                                        onUpgradeSuccess()
+                                    } else {
+                                        utrError = true
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B))
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Verified, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Verify & Activate Pro VIP", fontWeight = FontWeight.ExtraBold, color = Color.Black)
+                                }
+                            }
+                        }
                     }
                 }
             } else {
                 // Already Pro
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF064E3B).copy(alpha = 0.5f)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF059669))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color(0xFF34D399), modifier = Modifier.size(32.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("Pro VIP Membership Active", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
+                        Text("You are enjoying full ad-free playback, unlimited downloads, and studio audio.", fontSize = 11.sp, color = Color(0xFF94A3B8), textAlign = TextAlign.Center)
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = onDismiss,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B))
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Pro Membership Active", fontWeight = FontWeight.Bold, color = Color.White)
-                    }
+                    Text("Close", fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Test Mode Toggle (Simulate In-App Purchases for testing without Google Play Merchant account)
+            // Test Mode Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -275,13 +455,13 @@ fun WavePlayProSheet(
                 }
 
                 Text(
-                    text = "Google Play Billing Ready",
+                    text = "UPI: $CREATOR_UPI_ID",
                     color = Color(0xFF64748B),
-                    fontSize = 11.sp
+                    fontSize = 10.sp
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
         }
     }
 }

@@ -3,7 +3,6 @@ package com.example.ui.components
 import android.app.Activity
 import android.content.Context
 import android.media.AudioManager
-import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -23,10 +22,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.FastForward
@@ -36,7 +37,6 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,9 +62,11 @@ import kotlinx.coroutines.delay
 fun DoubleTapVideoGestureOverlay(
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
+    boostSpeedMultiplier: Float = 2.0f,
     onSingleTap: () -> Unit,
     onDoubleTapLeft: () -> Unit,
     onDoubleTapRight: () -> Unit,
+    onSpeedBoost: (Boolean) -> Unit = {},
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -75,17 +77,20 @@ fun DoubleTapVideoGestureOverlay(
     var showLeftIndicator by remember { mutableStateOf(false) }
     var showRightIndicator by remember { mutableStateOf(false) }
 
-    // Brightness state (0.0f .. 1.0f)
-    var brightnessLevel by remember { mutableFloatStateOf(0.7f) }
-    var showBrightnessHud by remember { mutableStateOf(false) }
-
-    // Volume state (0.0f .. 1.0f)
+    // Volume state on Left Side (0.0f .. 1.0f)
     var volumeLevel by remember {
         val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
         val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         mutableFloatStateOf(current.toFloat() / max)
     }
     var showVolumeHud by remember { mutableStateOf(false) }
+
+    // Brightness state on Right Side (0.0f .. 1.0f)
+    var brightnessLevel by remember { mutableFloatStateOf(0.7f) }
+    var showBrightnessHud by remember { mutableStateOf(false) }
+
+    // Speed boost state on Long Press
+    var isSpeedBoostActive by remember { mutableStateOf(false) }
 
     LaunchedEffect(showLeftIndicator) {
         if (showLeftIndicator) {
@@ -120,18 +125,76 @@ fun DoubleTapVideoGestureOverlay(
 
         if (!isLocked) {
             Row(modifier = Modifier.fillMaxSize()) {
-                // LEFT 50%: Tap, Double Tap to Rewind, Vertical Drag for Brightness
+                // LEFT 50%: Tap, Double Tap to Rewind, Vertical Drag for Volume ±, Long Press for Speed Boost
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
                         .testTag("video_left_gesture_area")
-                        .pointerInput(Unit) {
+                        .pointerInput(boostSpeedMultiplier) {
                             detectTapGestures(
                                 onTap = { onSingleTap() },
                                 onDoubleTap = {
                                     showLeftIndicator = true
                                     onDoubleTapLeft()
+                                },
+                                onLongPress = {
+                                    isSpeedBoostActive = true
+                                    onSpeedBoost(true)
+                                },
+                                onPress = {
+                                    tryAwaitRelease()
+                                    if (isSpeedBoostActive) {
+                                        isSpeedBoostActive = false
+                                        onSpeedBoost(false)
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = { showVolumeHud = true },
+                                onDragEnd = { /* auto-dismissed via LaunchedEffect */ },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    // Vertical drag: negative dragAmount.y = swipe UP = increase volume
+                                    val delta = -dragAmount.y / 600f
+                                    volumeLevel = (volumeLevel + delta).coerceIn(0f, 1.0f)
+                                    showVolumeHud = true
+
+                                    // Apply to Android AudioManager
+                                    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                    val targetVol = (volumeLevel * max).toInt().coerceIn(0, max)
+                                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {}
+
+                // RIGHT 50%: Tap, Double Tap to Fast Forward, Vertical Drag for Brightness, Long Press for Speed Boost
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .testTag("video_right_gesture_area")
+                        .pointerInput(boostSpeedMultiplier) {
+                            detectTapGestures(
+                                onTap = { onSingleTap() },
+                                onDoubleTap = {
+                                    showRightIndicator = true
+                                    onDoubleTapRight()
+                                },
+                                onLongPress = {
+                                    isSpeedBoostActive = true
+                                    onSpeedBoost(true)
+                                },
+                                onPress = {
+                                    tryAwaitRelease()
+                                    if (isSpeedBoostActive) {
+                                        isSpeedBoostActive = false
+                                        onSpeedBoost(false)
+                                    }
                                 }
                             )
                         }
@@ -156,115 +219,135 @@ fun DoubleTapVideoGestureOverlay(
                             )
                         },
                     contentAlignment = Alignment.Center
-                ) {
-                    // Double Tap Left Badge
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = showLeftIndicator,
-                        enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.8f),
-                        exit = fadeOut(tween(250)) + scaleOut(targetScale = 1.1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.7f))
-                                .padding(horizontal = 18.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.FastRewind,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "-10s",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-                            }
-                        }
-                    }
-                }
+                ) {}
+            }
 
-                // RIGHT 50%: Tap, Double Tap to Fast Forward, Vertical Drag for Volume
+            // Double Tap Left Badge (-10s)
+            AnimatedVisibility(
+                visible = showLeftIndicator,
+                enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.8f),
+                exit = fadeOut(tween(250)) + scaleOut(targetScale = 1.1f),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 48.dp)
+            ) {
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .testTag("video_right_gesture_area")
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onTap = { onSingleTap() },
-                                onDoubleTap = {
-                                    showRightIndicator = true
-                                    onDoubleTapRight()
-                                }
-                            )
-                        }
-                        .pointerInput(Unit) {
-                            detectDragGestures(
-                                onDragStart = { showVolumeHud = true },
-                                onDragEnd = { /* auto-dismissed via LaunchedEffect */ },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    // Vertical drag: negative dragAmount.y = swipe UP = increase volume
-                                    val delta = -dragAmount.y / 600f
-                                    volumeLevel = (volumeLevel + delta).coerceIn(0f, 1.0f)
-                                    showVolumeHud = true
-
-                                    // Apply to Android AudioManager
-                                    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                                    val targetVol = (volumeLevel * max).toInt().coerceIn(0, max)
-                                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
-                                }
-                            )
-                        },
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Double Tap Right Badge
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = showRightIndicator,
-                        enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.8f),
-                        exit = fadeOut(tween(250)) + scaleOut(targetScale = 1.1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.7f))
-                                .padding(horizontal = 18.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "+10s",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Icon(
-                                    imageVector = Icons.Default.FastForward,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.FastRewind,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "-10s",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
                     }
                 }
             }
 
-            // HUD OVERLAY: Left Side Brightness HUD Indicator
+            // Double Tap Right Badge (+10s)
             AnimatedVisibility(
-                visible = showBrightnessHud,
+                visible = showRightIndicator,
+                enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.8f),
+                exit = fadeOut(tween(250)) + scaleOut(targetScale = 1.1f),
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 48.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "+10s",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.FastForward,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                }
+            }
+
+            // HUD OVERLAY: Left Side Volume HUD Indicator
+            AnimatedVisibility(
+                visible = showVolumeHud,
                 enter = fadeIn() + scaleIn(initialScale = 0.9f),
                 exit = fadeOut() + scaleOut(targetScale = 0.9f),
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(start = 28.dp)
+            ) {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.75f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = if (volumeLevel > 0.05f) Icons.Default.VolumeUp else Icons.Default.VolumeMute,
+                            contentDescription = "Volume",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Box(
+                            modifier = Modifier
+                                .height(80.dp)
+                                .width(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.White.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .fillMaxHeight(volumeLevel)
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "${(volumeLevel * 100).toInt()}%",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
+            // HUD OVERLAY: Right Side Brightness HUD Indicator
+            AnimatedVisibility(
+                visible = showBrightnessHud,
+                enter = fadeIn() + scaleIn(initialScale = 0.9f),
+                exit = fadeOut() + scaleOut(targetScale = 0.9f),
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 28.dp)
             ) {
                 Card(
                     shape = RoundedCornerShape(18.dp),
@@ -300,71 +383,47 @@ fun DoubleTapVideoGestureOverlay(
                         Text(
                             text = "${(brightnessLevel * 100).toInt()}%",
                             color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
                         )
                     }
                 }
             }
 
-            // HUD OVERLAY: Right Side Volume HUD Indicator
+            // HUD OVERLAY: Top-Center Speed Boost Indicator (Long Press 2x or 3x)
             AnimatedVisibility(
-                visible = showVolumeHud,
-                enter = fadeIn() + scaleIn(initialScale = 0.9f),
-                exit = fadeOut() + scaleOut(targetScale = 0.9f),
+                visible = isSpeedBoostActive,
+                enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.85f),
+                exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.85f),
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 28.dp)
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 16.dp)
             ) {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.75f))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.Black.copy(alpha = 0.8f))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = if (volumeLevel > 0.05f) Icons.Default.VolumeUp else Icons.Default.VolumeMute,
-                            contentDescription = "Volume",
-                            tint = Color(0xFF38BDF8),
-                            modifier = Modifier.size(28.dp)
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Box(
-                            modifier = Modifier
-                                .height(80.dp)
-                                .width(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color.White.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.BottomCenter
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight(volumeLevel)
-                                    .background(Color(0xFF38BDF8))
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "${(volumeLevel * 100).toInt()}%",
+                            text = "${boostSpeedMultiplier.toInt()}X Fast Forward",
                             color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
                         )
                     }
                 }
             }
-        } else {
-            // When locked, tapping anywhere triggers single tap (which can show the unlock button)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = { onSingleTap() })
-                    }
-            )
         }
     }
 }

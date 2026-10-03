@@ -9,14 +9,16 @@ import androidx.room.RoomDatabase
     entities = [
         TrackEntity::class,
         PlaylistEntity::class,
-        PlaylistTrackCrossRef::class
+        PlaylistTrackCrossRef::class,
+        VaultItemEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun trackDao(): TrackDao
     abstract fun playlistDao(): PlaylistDao
+    abstract fun vaultDao(): VaultDao
 
     companion object {
         @Volatile

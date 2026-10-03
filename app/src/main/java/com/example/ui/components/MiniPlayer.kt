@@ -39,94 +39,114 @@ import androidx.compose.ui.unit.sp
 import com.example.player.PlaybackState
 import com.example.player.RepeatMode
 
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import com.example.util.TimeUtils
+
 @Composable
 fun MiniPlayer(
     modifier: Modifier = Modifier,
     playbackState: PlaybackState,
     onExpand: () -> Unit,
     onTogglePlay: () -> Unit,
-    onCycleRepeat: () -> Unit
+    onCycleRepeat: () -> Unit,
+    onPlayPrevious: () -> Unit = {},
+    onPlayNext: () -> Unit = {}
 ) {
     val track = playbackState.currentTrack ?: return
 
     val validDuration = playbackState.durationMs.coerceAtLeast(1000L)
     val progress = (playbackState.currentPositionMs.toFloat() / validDuration).coerceIn(0f, 1f)
 
-    // Pill container matching reference image 1 bottom player
+    // Pill container matching modern sleek bottom mini-player
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
             .testTag("mini_player_bar")
             .clickable { onExpand() },
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF26192E) // Dark plum matching image 1 bottom bar
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Squircle Thumbnail with Music Note (as shown in reference image 1)
+                // Squircle Thumbnail with Music Note
                 Box(
                     modifier = Modifier
-                        .size(46.dp)
+                        .size(44.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF3B2844)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.MusicNote,
                         contentDescription = null,
-                        tint = Color(track.coverColorHex).copy(alpha = 0.8f),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-                // Title
-                Text(
-                    text = track.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Repeat / Cycle button (as shown in reference image 1)
-                IconButton(
-                    onClick = onCycleRepeat,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .testTag("mini_player_repeat")
-                ) {
-                    val icon = if (playbackState.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = "Repeat",
-                        tint = if (playbackState.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.75f),
-                        modifier = Modifier.size(22.dp)
+                // Title, Artist, and Duration
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = track.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (track.artist == "Generated") "Generated" else track.artist,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (track.artist == "Generated") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (track.artist == "Generated") FontWeight.SemiBold else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontSize = 11.sp
+                        )
+                        Text(
+                            text = " • ${TimeUtils.formatMs(playbackState.currentPositionMs)} / ${TimeUtils.formatMs(validDuration)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(4.dp))
 
-                // Play / Pause outline circle button (as shown in reference image 1)
+                // Previous Button
+                IconButton(
+                    onClick = onPlayPrevious,
+                    modifier = Modifier.size(34.dp).testTag("mini_player_prev")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipPrevious,
+                        contentDescription = "Previous",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Play / Pause outline circle button
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.15f))
+                        .background(MaterialTheme.colorScheme.primary)
                         .clickable { onTogglePlay() }
                         .testTag("mini_player_toggle"),
                     contentAlignment = Alignment.Center
@@ -134,20 +154,33 @@ fun MiniPlayer(
                     Icon(
                         imageVector = if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (playbackState.isPlaying) "Pause" else "Play",
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Next Button
+                IconButton(
+                    onClick = onPlayNext,
+                    modifier = Modifier.size(34.dp).testTag("mini_player_next")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = "Next",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            // Slim progress indicator
+            // Visible smooth progress indicator
             LinearProgressIndicator(
                 progress = { progress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(2.5.dp),
+                    .height(3.5.dp),
                 color = MaterialTheme.colorScheme.primary,
-                trackColor = Color.White.copy(alpha = 0.1f)
+                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
             )
         }
     }

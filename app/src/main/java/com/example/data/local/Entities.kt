@@ -43,3 +43,15 @@ data class PlaylistTrackCrossRef(
     val trackId: String,
     val orderIndex: Int = 0
 )
+
+@Entity(tableName = "vault_items")
+data class VaultItemEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val mediaUri: String,
+    val mediaType: String, // "AUDIO", "VIDEO", "PHOTO"
+    val sizeBytes: Long = 0L,
+    val durationMs: Long = 0L,
+    val dateHidden: Long = System.currentTimeMillis(),
+    val originalArtist: String = ""
+)

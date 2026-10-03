@@ -29,6 +29,7 @@ sealed class Screen(val title: String) {
     data object Equalizer : Screen("Equalizer")
     data object Downloader : Screen("Downloader")
     data object AiMusic : Screen("AI Music")
+    data object Vault : Screen("Safe Vault")
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -101,6 +102,76 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isProSheetVisible = MutableStateFlow(false)
     val isProSheetVisible: StateFlow<Boolean> = _isProSheetVisible.asStateFlow()
 
+    private val _isSettingsDialogVisible = MutableStateFlow(false)
+    val isSettingsDialogVisible: StateFlow<Boolean> = _isSettingsDialogVisible.asStateFlow()
+
+    private val _videoBoostSpeed = MutableStateFlow(prefs.getFloat("video_boost_speed", 2.0f))
+    val videoBoostSpeed: StateFlow<Float> = _videoBoostSpeed.asStateFlow()
+
+    val vaultItems: StateFlow<List<com.example.data.local.VaultItemEntity>> = repository.vaultItems
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setSettingsDialogVisible(visible: Boolean) {
+        _isSettingsDialogVisible.value = visible
+    }
+
+    fun setVideoBoostSpeed(speed: Float) {
+        _videoBoostSpeed.value = speed
+        prefs.edit().putFloat("video_boost_speed", speed).apply()
+    }
+
+    fun hideTrackToVault(track: TrackEntity, type: String = if (track.isVideo) "VIDEO" else "AUDIO") {
+        viewModelScope.launch {
+            if (playbackState.value.currentTrack?.id == track.id) {
+                playbackManager.exoPlayer.stop()
+            }
+            if (activeVideoPlayer.value?.id == track.id) {
+                closeVideoPlayer()
+            }
+            repository.hideTrackToVault(track, type)
+        }
+    }
+
+    fun hideMediaUriToVault(uri: String, title: String, type: String) {
+        viewModelScope.launch {
+            repository.hideMediaUriToVault(uri, title, type)
+        }
+    }
+
+    fun restoreVaultItem(item: com.example.data.local.VaultItemEntity) {
+        viewModelScope.launch {
+            repository.restoreVaultItem(item)
+        }
+    }
+
+    fun deleteVaultItemPermanently(item: com.example.data.local.VaultItemEntity) {
+        viewModelScope.launch {
+            repository.deleteVaultItemPermanently(item)
+        }
+    }
+
+    fun playNextVideo() {
+        val current = _activeVideoPlayer.value ?: return
+        val list = videoTracks.value
+        val idx = list.indexOfFirst { it.id == current.id }
+        if (idx in 0 until list.lastIndex) {
+            openVideoPlayer(list[idx + 1])
+        } else if (list.isNotEmpty()) {
+            openVideoPlayer(list[0])
+        }
+    }
+
+    fun playPrevVideo() {
+        val current = _activeVideoPlayer.value ?: return
+        val list = videoTracks.value
+        val idx = list.indexOfFirst { it.id == current.id }
+        if (idx > 0) {
+            openVideoPlayer(list[idx - 1])
+        } else if (list.isNotEmpty()) {
+            openVideoPlayer(list.last())
+        }
+    }
+
     fun setProSheetVisible(visible: Boolean) {
         _isProSheetVisible.value = visible
     }
@@ -116,9 +187,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putBoolean("is_pro_user", next).apply()
     }
 
+    fun activateDeveloperBypass(): Boolean {
+        prefs.edit()
+            .putBoolean("owner_bypass_activated", true)
+            .putBoolean("owner_once_used", true)
+            .putBoolean("is_pro_user", true)
+            .apply()
+        _isProUser.value = true
+        return true
+    }
+
+    fun activateProWithUpi(planType: String, utr: String) {
+        val durationMs = when (planType) {
+            "monthly" -> 30L * 24 * 3600 * 1000L
+            "yearly" -> 365L * 24 * 3600 * 1000L
+            else -> -1L // Lifetime
+        }
+        val expiry = if (durationMs > 0) System.currentTimeMillis() + durationMs else -1L
+        prefs.edit()
+            .putBoolean("is_pro_user", true)
+            .putLong("pro_plan_expiry_time", expiry)
+            .putString("pro_plan_utr", utr)
+            .putString("pro_plan_type", planType)
+            .apply()
+        _isProUser.value = true
+    }
+
     init {
+        val isOwner = prefs.getBoolean("owner_bypass_activated", false)
         val savedPro = prefs.getBoolean("is_pro_user", false)
-        if (savedPro) _isProUser.value = true
+        val expiryTime = prefs.getLong("pro_plan_expiry_time", 0L)
+        val isPlanValid = if (isOwner) {
+            true
+        } else if (expiryTime > 0L) {
+            val valid = System.currentTimeMillis() < expiryTime
+            if (!valid) {
+                prefs.edit().putBoolean("is_pro_user", false).apply()
+            }
+            valid
+        } else {
+            savedPro
+        }
+        _isProUser.value = isPlanValid
 
         viewModelScope.launch {
             repository.initializeOfflineSamplesIfEmpty()

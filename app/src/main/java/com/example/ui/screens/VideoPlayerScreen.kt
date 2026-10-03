@@ -1,7 +1,11 @@
 package com.example.ui.screens
 
+import android.app.Activity
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
@@ -24,10 +28,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Pause
@@ -35,9 +38,10 @@ import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -53,6 +57,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,6 +66,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,6 +79,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.example.data.local.TrackEntity
 import com.example.player.PlaybackManager
+import com.example.player.PlaybackService
 import com.example.player.PlaybackState
 import com.example.ui.components.DoubleTapVideoGestureOverlay
 import com.example.util.TimeUtils
@@ -84,17 +92,34 @@ fun VideoPlayerScreen(
     playbackManager: PlaybackManager,
     playbackState: PlaybackState,
     isInPipMode: Boolean = false,
+    boostSpeedMultiplier: Float = 2.0f,
+    onNextVideo: () -> Unit = {},
+    onPrevVideo: () -> Unit = {},
     onClose: () -> Unit
 ) {
     BackHandler {
         onClose()
     }
 
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     var areControlsVisible by remember { mutableStateOf(true) }
     var isControlsLocked by remember { mutableStateOf(false) }
     var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     var showSpeedMenu by remember { mutableStateOf(false) }
+    var normalSpeed by remember { mutableFloatStateOf(1.0f) }
+    var isBackgroundPlayActive by remember { mutableStateOf(false) }
+    var currentBoostSpeed by remember(boostSpeedMultiplier) { mutableFloatStateOf(boostSpeedMultiplier) }
+
+    // Reset screen orientation when exiting video player
+    DisposableEffect(Unit) {
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
 
     // Auto-hide controls after 4 seconds of inactivity if playing and not locked
     LaunchedEffect(areControlsVisible, playbackState.isPlaying, isControlsLocked) {
@@ -110,10 +135,11 @@ fun VideoPlayerScreen(
             .background(Color.Black)
             .testTag("video_player_fullscreen")
     ) {
-        // Double-tap & swipe gesture wrapper with Media3 PlayerView inside
+        // Double-tap & swipe gesture wrapper (Volume left, Brightness right, Long-press speed boost)
         DoubleTapVideoGestureOverlay(
             modifier = Modifier.fillMaxSize(),
             isLocked = isControlsLocked,
+            boostSpeedMultiplier = currentBoostSpeed,
             onSingleTap = {
                 if (!isControlsLocked) {
                     areControlsVisible = !areControlsVisible
@@ -122,19 +148,24 @@ fun VideoPlayerScreen(
                 }
             },
             onDoubleTapLeft = {
-                // Double tap left: rewind 10s
                 playbackManager.seekBy(-10_000L)
             },
             onDoubleTapRight = {
-                // Double tap right: forward 10s
                 playbackManager.seekBy(10_000L)
+            },
+            onSpeedBoost = { boost ->
+                if (boost) {
+                    playbackManager.setPlaybackSpeed(currentBoostSpeed)
+                } else {
+                    playbackManager.setPlaybackSpeed(normalSpeed)
+                }
             }
         ) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
                         player = playbackManager.exoPlayer
-                        useController = false // Use our custom Jetpack Compose controls
+                        useController = false
                         layoutParams = FrameLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
@@ -161,7 +192,7 @@ fun VideoPlayerScreen(
             )
         }
 
-        // Overlay Controls (Animated Visibility)
+        // Overlay Controls (Animated Visibility on screen touch)
         AnimatedVisibility(
             visible = areControlsVisible && !isControlsLocked && !isInPipMode,
             enter = fadeIn(),
@@ -181,7 +212,7 @@ fun VideoPlayerScreen(
                         )
                     )
             ) {
-                // Top Bar
+                // Top Bar: Back, Title, PiP, Screen Rotate, Background Play, Aspect Ratio, Speed, Lock
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -192,16 +223,16 @@ fun VideoPlayerScreen(
                 ) {
                     IconButton(
                         onClick = onClose,
-                        modifier = Modifier.size(48.dp).testTag("video_back_btn")
+                        modifier = Modifier.size(44.dp).testTag("video_back_btn")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                             tint = Color.White
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     Text(
                         text = video.title,
@@ -213,10 +244,47 @@ fun VideoPlayerScreen(
                         modifier = Modifier.weight(1f)
                     )
 
-                    // Picture-in-Picture Button
+                    // Horizontal / Vertical Orientation Toggle
                     IconButton(
                         onClick = {
-                            val activity = context as? android.app.Activity
+                            activity?.requestedOrientation = if (isLandscape) {
+                                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                            } else {
+                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            }
+                        },
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ScreenRotation,
+                            contentDescription = if (isLandscape) "Switch to Vertical" else "Switch to Horizontal",
+                            tint = if (isLandscape) MaterialTheme.colorScheme.primary else Color.White
+                        )
+                    }
+
+                    // Background Audio / Screen-off Playback Toggle (for Headphones)
+                    IconButton(
+                        onClick = {
+                            isBackgroundPlayActive = !isBackgroundPlayActive
+                            if (isBackgroundPlayActive) {
+                                PlaybackService.start(context)
+                                Toast.makeText(context, "🎧 Screen-off background playback enabled", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Screen-off background playback disabled", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Headphones,
+                            contentDescription = "Play in background with screen off",
+                            tint = if (isBackgroundPlayActive) MaterialTheme.colorScheme.primary else Color.White
+                        )
+                    }
+
+                    // Manual Picture-in-Picture Button (User clicks = floats)
+                    IconButton(
+                        onClick = {
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && activity != null) {
                                 val pipParams = android.app.PictureInPictureParams.Builder()
                                     .setAspectRatio(android.util.Rational(16, 9))
@@ -224,7 +292,7 @@ fun VideoPlayerScreen(
                                 activity.enterPictureInPictureMode(pipParams)
                             }
                         },
-                        modifier = Modifier.size(48.dp).testTag("video_pip_btn")
+                        modifier = Modifier.size(42.dp).testTag("video_pip_btn")
                     ) {
                         Icon(
                             imageVector = Icons.Default.PictureInPictureAlt,
@@ -233,7 +301,7 @@ fun VideoPlayerScreen(
                         )
                     }
 
-                    // Aspect Ratio Button
+                    // Aspect Ratio Button (Fit / Zoom / Fill)
                     IconButton(
                         onClick = {
                             resizeMode = when (resizeMode) {
@@ -242,7 +310,7 @@ fun VideoPlayerScreen(
                                 else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
                             }
                         },
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(42.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.AspectRatio,
@@ -255,7 +323,7 @@ fun VideoPlayerScreen(
                     Box {
                         IconButton(
                             onClick = { showSpeedMenu = true },
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(42.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Speed,
@@ -267,10 +335,19 @@ fun VideoPlayerScreen(
                             expanded = showSpeedMenu,
                             onDismissRequest = { showSpeedMenu = false }
                         ) {
-                            listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { spd ->
+                            DropdownMenuItem(
+                                text = { Text("⚡ Long-Press: ${currentBoostSpeed.toInt()}X (tap to toggle 2X/3X)") },
+                                onClick = {
+                                    currentBoostSpeed = if (currentBoostSpeed == 2.0f) 3.0f else 2.0f
+                                    Toast.makeText(context, "Long-press speed set to ${currentBoostSpeed.toInt()}X", Toast.LENGTH_SHORT).show()
+                                    showSpeedMenu = false
+                                }
+                            )
+                            listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 3.0f).forEach { spd ->
                                 DropdownMenuItem(
                                     text = { Text("${spd}x") },
                                     onClick = {
+                                        normalSpeed = spd
                                         playbackManager.setPlaybackSpeed(spd)
                                         showSpeedMenu = false
                                     }
@@ -282,7 +359,7 @@ fun VideoPlayerScreen(
                     // Lock Button
                     IconButton(
                         onClick = { isControlsLocked = true },
-                        modifier = Modifier.size(48.dp).testTag("video_lock_btn")
+                        modifier = Modifier.size(42.dp).testTag("video_lock_btn")
                     ) {
                         Icon(
                             imageVector = Icons.Default.LockOpen,
@@ -292,17 +369,33 @@ fun VideoPlayerScreen(
                     }
                 }
 
-                // Center Play/Pause & Quick Skip Buttons
+                // Center Play/Pause & Skip Video Controls (Previous, Rewind 10s, Play/Pause, Forward 10s, Next)
                 Row(
                     modifier = Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Rewind 10s Button
+                    // Previous Video
+                    IconButton(
+                        onClick = onPrevVideo,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.5f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipPrevious,
+                            contentDescription = "Previous Video",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    // Rewind 10s
                     IconButton(
                         onClick = { playbackManager.seekBy(-10_000L) },
                         modifier = Modifier
-                            .size(54.dp)
+                            .size(52.dp)
                             .clip(CircleShape)
                             .background(Color.Black.copy(alpha = 0.5f))
                             .testTag("video_rewind_10_btn")
@@ -311,11 +404,11 @@ fun VideoPlayerScreen(
                             imageVector = Icons.Default.Replay10,
                             contentDescription = "Rewind 10 seconds",
                             tint = Color.White,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(30.dp)
                         )
                     }
 
-                    // Play/Pause Big Center Button
+                    // Big Center Play/Pause Button
                     FilledIconButton(
                         onClick = { playbackManager.togglePlayPause() },
                         modifier = Modifier
@@ -333,11 +426,11 @@ fun VideoPlayerScreen(
                         )
                     }
 
-                    // Fast-Forward 10s Button
+                    // Fast-Forward 10s
                     IconButton(
                         onClick = { playbackManager.seekBy(10_000L) },
                         modifier = Modifier
-                            .size(54.dp)
+                            .size(52.dp)
                             .clip(CircleShape)
                             .background(Color.Black.copy(alpha = 0.5f))
                             .testTag("video_forward_10_btn")
@@ -346,7 +439,23 @@ fun VideoPlayerScreen(
                             imageVector = Icons.Default.Forward10,
                             contentDescription = "Forward 10 seconds",
                             tint = Color.White,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+
+                    // Next Video
+                    IconButton(
+                        onClick = onNextVideo,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.5f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipNext,
+                            contentDescription = "Next Video",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 }

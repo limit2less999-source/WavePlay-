@@ -103,6 +103,9 @@ class PlaybackManager(private val context: Context) {
 
                 if (state == Player.STATE_READY) {
                     audioEffectController.attachAudioSession(exoPlayer.audioSessionId)
+                    try {
+                        PlaybackService.activeService?.updateNotification()
+                    } catch (_: Exception) {}
                 } else if (state == Player.STATE_ENDED) {
                     handleTrackEnded()
                 }
@@ -116,6 +119,9 @@ class PlaybackManager(private val context: Context) {
                 _playbackState.value = _playbackState.value.copy(
                     currentPositionMs = exoPlayer.currentPosition
                 )
+                try {
+                    PlaybackService.activeService?.updateNotification()
+                } catch (_: Exception) {}
             }
         })
     }
@@ -123,6 +129,7 @@ class PlaybackManager(private val context: Context) {
     private fun startProgressTracker() {
         progressJob?.cancel()
         progressJob = scope.launch {
+            var tickCount = 0
             while (isActive) {
                 if (exoPlayer.isPlaying) {
                     val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
@@ -131,6 +138,12 @@ class PlaybackManager(private val context: Context) {
                         currentPositionMs = pos,
                         durationMs = dur
                     )
+                    tickCount++
+                    if (tickCount % 5 == 0) { // Every 1 second, refresh notification progress
+                        try {
+                            PlaybackService.activeService?.updateNotification()
+                        } catch (_: Exception) {}
+                    }
                 }
                 delay(200)
             }
@@ -158,12 +171,30 @@ class PlaybackManager(private val context: Context) {
             Uri.fromFile(File(track.mediaUri))
         }
 
-        val mediaItem = MediaItem.fromUri(uri)
+        val metadataBuilder = androidx.media3.common.MediaMetadata.Builder()
+            .setTitle(track.title)
+            .setArtist(track.artist)
+            .setAlbumTitle(track.album)
+            .setDisplayTitle(track.title)
+
+        if (!track.artUri.isNullOrEmpty()) {
+            try {
+                metadataBuilder.setArtworkUri(Uri.parse(track.artUri))
+            } catch (_: Exception) {}
+        }
+
+        val mediaItem = MediaItem.Builder()
+            .setUri(uri)
+            .setMediaId(track.id)
+            .setMediaMetadata(metadataBuilder.build())
+            .build()
+
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
         exoPlayer.play()
         try {
             PlaybackService.start(context)
+            PlaybackService.activeService?.updateNotification()
         } catch (_: Exception) {}
     }
 
@@ -177,12 +208,18 @@ class PlaybackManager(private val context: Context) {
                 exoPlayer.play()
             }
         }
+        try {
+            PlaybackService.activeService?.updateNotification()
+        } catch (_: Exception) {}
     }
 
     fun seekTo(positionMs: Long) {
         val clamped = positionMs.coerceIn(0L, _playbackState.value.durationMs.coerceAtLeast(1000L))
         _playbackState.value = _playbackState.value.copy(currentPositionMs = clamped)
         exoPlayer.seekTo(clamped)
+        try {
+            PlaybackService.activeService?.updateNotification()
+        } catch (_: Exception) {}
     }
 
     fun seekBy(deltaMs: Long) {

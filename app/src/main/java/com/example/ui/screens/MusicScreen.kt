@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.GraphicEq
@@ -105,7 +107,10 @@ fun MusicScreen(
     onToggleShuffle: () -> Unit = {},
     onCycleRepeatMode: () -> Unit = {},
     isPlayTogether: Boolean = false,
-    onTogglePlayTogether: () -> Unit = {}
+    onTogglePlayTogether: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onOpenVault: () -> Unit = {},
+    onHideTrackToVault: (TrackEntity) -> Unit = {}
 ) {
     val audioPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -213,6 +218,19 @@ fun MusicScreen(
                             imageVector = Icons.Default.Palette,
                             contentDescription = "Theme",
                             tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    // App Settings (Play together, Vault, Video speed)
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.size(38.dp).testTag("home_settings_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.onBackground,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -631,10 +649,12 @@ fun MusicScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
+                                    val isAiTrack = track.artist == "Generated" || track.sourceUrl?.startsWith("gemini") == true
                                     Text(
-                                        text = if (track.album.isNotBlank()) track.album else "Local Audio",
+                                        text = if (isAiTrack) "Generated" else (if (track.artist.isNotBlank()) track.artist else if (track.album.isNotBlank()) track.album else "Local Audio"),
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = if (isAiTrack) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = if (isAiTrack) FontWeight.SemiBold else FontWeight.Normal,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -715,6 +735,16 @@ fun MusicScreen(
                                                     }
                                                 }
                                                 context.startActivity(android.content.Intent.createChooser(sendIntent, "Share Track"))
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Move to Safe Vault") },
+                                            leadingIcon = {
+                                                Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF10B981))
+                                            },
+                                            onClick = {
+                                                showTrackMenu = false
+                                                onHideTrackToVault(track)
                                             }
                                         )
                                         DropdownMenuItem(

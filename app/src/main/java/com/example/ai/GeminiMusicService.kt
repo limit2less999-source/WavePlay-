@@ -158,7 +158,7 @@ class GeminiMusicService(
         val track = TrackEntity(
             id = UUID.randomUUID().toString(),
             title = title,
-            artist = "Gemini AI",
+            artist = "Generated",
             album = "Gemini Studio Creations",
             durationMs = (params.durationSeconds * 1000).toLong(),
             mediaUri = outputFile.absolutePath,
@@ -292,7 +292,7 @@ class GeminiMusicService(
         return TrackEntity(
             id = UUID.randomUUID().toString(),
             title = title,
-            artist = "Gemini AI Studio",
+            artist = "Generated",
             album = "${params.genre} Collection",
             durationMs = (durationSec * 1000).toLong(),
             mediaUri = outputFile.absolutePath,

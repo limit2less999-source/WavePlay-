@@ -728,9 +728,10 @@ fun AiMusicGeneratorScreen(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "${track.album} • ${TimeUtils.formatMs(track.durationMs)}",
+                                        text = "Generated • ${track.album} • ${TimeUtils.formatMs(track.durationMs)}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF94A3B8)
+                                        color = Color(0xFF38BDF8),
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
 
